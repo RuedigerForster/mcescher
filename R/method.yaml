@@ -1,0 +1,67 @@
+# method.yaml — GC-FID light hydrocarbons
+# =========================================================================
+# USER-SERVICEABLE SETTINGS
+# =========================================================================
+
+method:
+  name: "GC-FID light hydrocarbons"
+  detector: FID
+  RT_unit: min
+
+# Retention-time regions to exclude from baseline estimation and detection.
+# Format: [start_min, end_min]
+inhibit:
+  - [0.00, 1.10]     # dead time / solvent front
+  - [20.38, 27.00]   # tail region
+
+# Named peaks: detected peaks are matched to these by nearest RT within window.
+# Unmatched detected peaks receive name = NA.
+# Named peaks with no match produce a warning.
+peaks:
+  - name: Methane
+    RT_ref:    1.37
+    RT_window: 0.20
+  - name: Ethane
+    RT_ref:    1.81
+    RT_window: 0.20
+  - name: Propane
+    RT_ref:    5.64
+    RT_window: 0.30
+  - name: iso-Butane
+    RT_ref:    15.55
+    RT_window: 0.30
+  - name: n-Butane
+    RT_ref:    16.19
+    RT_window: 0.30
+
+# =========================================================================
+# ADVANCED TUNING  (change with care)
+# =========================================================================
+
+processing:
+  x_factor: 50       # block-average compression factor (integer)
+  denoise:   true    # run SASS denoising before baseline estimation
+
+# SASS denoising parameters (RF-tuned; only used when processing.denoise = true)
+denoising:
+  d:   1
+  fc:  0.011
+  K:   1
+  lam: 0.2
+
+# Primary baseline algorithm
+baseline:
+  algorithm: arPLS
+  lambda:    1.0e7   # smoothness penalty  (1e6 – 1e8)
+  ratio:     1.0e-6  # convergence threshold
+
+# Peak detection
+detection:
+  amp_thresh:          0.06   # minimum peak height after baseline correction
+  smooth_width_factor: 7      # smooth_width = this × x_factor (samples)
+
+# Integration
+integration:
+  methods:         [PD, TS, gauss, EGH]
+  ensemble_method: TS
+  run_ensemble:    true
