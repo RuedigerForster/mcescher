@@ -1,0 +1,48 @@
+Another approach to baseline correction is by utilizing the concept of local minimum
+values (LMVs) [46]. The approach consists of three stages, namely: i) initialization, ii)
+iterative optimization, and iii) an estimation of background drift. In the first stage a
+set of data points are assigned as local minimum values if the following set of
+conditions are satisfied:
+𝑥𝑖−1 > 𝑥𝑖(6.7a)
+𝑥𝑖 < 𝑥𝑖+1(6.7b)
+In which 𝑥𝑖 is the ith data point in the chromatogram, while 𝑥𝑖−1 and 𝑥𝑖+1 are the data
+points before and after 𝑥𝑖 . A chromatogram with LMVs selected is illustrated in
+Figure 6.2.
+The complete set of LMVs is stored in a “minimum vector” and consists of
+chromatographic peak points and noise. This minimum vector is shown in Figure
+6.2-B. Any of the peak points that may have been included in the minimum vector
+are treated as outliers and removed by utilizing a moving-window strategy. This
+requires an a priori estimation of the appropriate width of the moving window. The
+initial minimum vector that still contains outliers and the corrected minimum vector
+are shown in Figure 6.2-B and 6.2-C, respectively. Any point with a signal-to-noise
+ratio (S/N) larger than 2.5 is considered a peak point and replaced with the median
+value of an extracted vector from the window in which that point occurs. This strategy
+is then repeated until convergence. After the iterative optimization stage, the
+baseline is estimated by linear interpolation. The corrected chromatogram is
+ultimately obtained by subtracting the estimated baseline from the original data, as
+is illustrated in Figure 6.2-D.
+The LMV method was compared with morphologically-penalized-least-squares
+(MPLS) [28] and moving-window-minimum-value (MWMV) methods [47] using both
+simulated and GC data. The simulated data consisted of both single and overlapping
+peaks, with the latter being comprised of contributions of two, three or four peaks.
+Using the simulated data, peak areas and standard deviations were determined after
+background correction by local minimum values-robust statistical analysis (LMV-
+RSA), MWMV and MPLS at different levels of noise. It was demonstrated that the
+LMV-RSA approach yielded the most-accurate peak areas and the lowest standard
+deviations, with recoveries close to 100% in all cases and standard deviations below
+4.5% at all but the highest noise level. MWMV performed slightly worse, while MPLS
+generally resulted in significantly lower peak areas, especially in the case of
+overlapping peaks, with recoveries of around 53% and 74% for the peak clusters
+containing three and four peaks, respectively. The influence of the moving-window
+width (in the range between 20 and 80 data points) was found negligible for the GC
+data set.
+Additionally, the LMV approach was compared to the “background drift correction
+by orthogonal subspace projection” (BD-OSP) method, which was utilized for the LC-
+QTOF-MS data [41]. In this case the differences were only assessed qualitatively. It
+was shown that after correction with BD-OSP, total-ion-current (TIC) data still
+contained background drift, whereas data corrected with LMV-RSA did not contain
+background drift but had lost part of the information contained in the TIC [44]. The
+comparisons showed that LMV-RSA performed comparably or better than the MPLS,
+MWMV and OSP approaches. However, as also stated by the authors, it is important
+to note that the technique can only be applied if local minimum values can be
+assigned.
