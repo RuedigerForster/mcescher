@@ -1,21 +1,21 @@
-# m.c.escher
+# mcescher
 
 <p align="center">
-  <img src="logo.png" width="160" alt="m.c.escher logo"/>
+  <img src="logo.png" width="160" alt="mcescher logo"/>
 </p>
 
-> Automated chromatographic peak integration with uncertainty quantification.
+> Automated chromatographic peak integration with uncertainty quantification for target compound analysis.
 
 ---
 
 ## Motivation
 
-Manual peak integration is the last routine step in chromatographic data analysis
+Manual peak integration is a crucial step in chromatographic data analysis
 that still depends heavily on expert judgement. Results vary between operators,
 software versions, and integration parameter sets — yet the reported area is
 usually presented as a single number with no uncertainty attached.
 
-**m.c.escher** addresses this by treating baseline placement as an ensemble
+**mcescher** addresses this by treating baseline placement as an ensemble
 estimation problem: multiple baseline algorithms and parameter combinations are
 run in parallel, their results are combined using a correlation-weighted consensus,
 and a realistic uncertainty is derived from three independent sources:
@@ -27,6 +27,14 @@ and a realistic uncertainty is derived from three independent sources:
 | SASS denoising distortion | u_sass | \|∫(pre − post SASS)\| over peak window |
 
 These combine in quadrature: **U = 2 · √(u_baseline² + u_noise² + u_sass²)** (k = 2, ~95 %).
+
+---
+
+## Premises
+
+Current instrument technology is highly advanced, so that the sampled signal trace can be considered artifact-free in most cases. The dominant uncertainty sources of the peak areas are the injected sample amounts — which, because all peaks share the same injection, introduce a high degree of correlation across the chromatogram — and the subjective estimation of the baseline course. Consequently, a baseline that preserves this inter-peak correlation is preferred as the consensus estimate.
+
+We expect the ideal peak areas to be affected only by Gaussian noise, and their uncertainties to follow a smooth curve (dominated by detector non-linearity). Occasionally, baseline drift and wandering may disturb individual peaks and break this pattern. Therefore, in a second step, Z-scores of the peak areas are calculated relative to the expected smooth curve, and peaks with deviating Z-scores have their uncertainty inflated accordingly.
 
 ---
 
@@ -64,7 +72,7 @@ generate training labels.
 ```r
 # From GitHub (development version)
 # install.packages("remotes")
-remotes::install_github("RuedigerForster/Integration")
+remotes::install_github("RuedigerForster/mcescher")
 ```
 
 CRAN submission is planned once the API stabilises.
@@ -224,9 +232,9 @@ GPL (≥ 3)
 ```bibtex
 @software{forster2026mcescher,
   author  = {Forster, Rüdiger},
-  title   = {m.c.escher: Automated Chromatographic Peak Integration
-             with Uncertainty Quantification},
+  title   = {mcescher: Automated Chromatographic Peak Integration
+             with Uncertainty Quantification for Target Compound Analysis},
   year    = {2026},
-  url     = {https://github.com/RuedigerForster/Integration}
+  url     = {https://github.com/RuedigerForster/mcescher}
 }
 ```
