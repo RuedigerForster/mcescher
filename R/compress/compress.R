@@ -1,31 +1,32 @@
-library(fields)
-
 rescale <- function(x, newrange=range(x)){
   xrange <- range(x)
   mfac <- (newrange[2]-newrange[1])/(xrange[2]-xrange[1])
   return(newrange[1]+(x-xrange[1])*mfac)
 }
 
+interp_bilinear <- function(obj, loc) {
+  x <- obj$x; y <- obj$y; z <- obj$z
+  px <- loc[, 1]; py <- loc[, 2]
+  ix <- pmax(1L, pmin(findInterval(px, x, rightmost.closed = TRUE), length(x) - 1L))
+  iy <- pmax(1L, pmin(findInterval(py, y, rightmost.closed = TRUE), length(y) - 1L))
+  tx <- (px - x[ix]) / (x[ix + 1L] - x[ix])
+  ty <- (py - y[iy]) / (y[iy + 1L] - y[iy])
+  z[cbind(ix,      iy     )] * (1-tx) * (1-ty) +
+  z[cbind(ix + 1L, iy     )] *    tx  * (1-ty) +
+  z[cbind(ix,      iy + 1L)] * (1-tx) *    ty  +
+  z[cbind(ix + 1L, iy + 1L)] *    tx  *    ty
+}
+
 ResizeMat <- function(mat, ndim=dim(mat)){
-  if(!require(fields)) stop("`fields` required.")
-  
-  # input object
   odim <- dim(mat)
   obj <- list(x= 1:odim[1], y=1:odim[2], z= mat)
-  
-  # output object
   ans <- matrix(NA, nrow=ndim[1], ncol=ndim[2])
   ndim <- dim(ans)
-  
-  # rescaling
   ncord <- as.matrix(expand.grid(seq_len(ndim[1]), seq_len(ndim[2])))
   loc <- ncord
   loc[,1] = rescale(ncord[,1], c(1,odim[1]))
   loc[,2] = rescale(ncord[,2], c(1,odim[2]))
-  
-  # interpolation
-  ans[ncord] <- interp.surface(obj, loc)
-  
+  ans[ncord] <- interp_bilinear(obj, loc)
   ans
 }
 

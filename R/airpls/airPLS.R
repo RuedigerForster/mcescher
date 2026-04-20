@@ -53,9 +53,10 @@ airPLS <- function(X, lambda=1e8, order=2, wep=0.1, p=0.05, itermax=20) {
         break
       }
       
+      overflow <- log(.Machine$double.xmax)
       w[d >= 0] <- 0
       w[wi] <- p
-      w[d < 0] <- exp(j * abs(d[d < 0]) / dssn)
+      w[d < 0] <- exp(pmin(j * abs(d[d < 0]) / dssn, overflow))
     }
     Z[i, ] <- z
   }
