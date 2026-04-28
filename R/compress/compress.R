@@ -36,15 +36,18 @@ ResizeVec <- function(vec, ndim=length(vec)){
 }
 
 compress_mat <- function(df, compression_factor) {
-  if (ncol(df) == 1L) {
-    xf <- compression_factor[1]
-    n  <- nrow(df) %/% xf
-    m  <- matrix(colMeans(matrix(as.numeric(df[1:(n * xf), 1]), nrow = xf)), ncol = 1L)
-    return(m)
-  }
-  return(
-    ResizeMat(df, ndim = c(nrow(df)/compression_factor[1], ncol(df)/compression_factor[2]))
-  )
+  xf <- compression_factor[1]
+  n  <- nrow(df) %/% xf
+  nc <- ncol(df)
+  # Block-average each column: reshape each column into (xf × n) and take column means.
+  # This correctly averages all samples within each block, preserving narrow peak areas.
+  # The old multi-column path used ResizeMat (bilinear sampling), which aliases narrow
+  # peaks — a peak narrower than xf samples would land between sample grid points and
+  # effectively vanish.
+  m <- vapply(seq_len(nc), function(j)
+    colMeans(matrix(as.numeric(df[1:(n * xf), j]), nrow = xf)),
+    numeric(n))
+  matrix(m, nrow = n, ncol = nc)
 }
 
 compress_vec <- function(vec, compression_factor) {
@@ -53,9 +56,10 @@ compress_vec <- function(vec, compression_factor) {
 }
 
 decompress_mat <- function(mat, n_full) {
-  if (ncol(mat) == 1L) {
-    xout <- seq(1, nrow(mat), length.out = n_full)
-    return(matrix(approx(seq_len(nrow(mat)), mat[, 1], xout = xout)$y, ncol = 1L))
-  }
-  ResizeMat(mat, ndim = c(n_full, ncol(mat)))
+  xout <- seq(1, nrow(mat), length.out = n_full)
+  x_in <- seq_len(nrow(mat))
+  m <- vapply(seq_len(ncol(mat)), function(j)
+    approx(x_in, mat[, j], xout = xout, rule = 2)$y,
+    numeric(n_full))
+  matrix(m, nrow = n_full, ncol = ncol(mat))
 }

@@ -56,8 +56,12 @@
     error = function(e) NULL)
   if (is.null(coef) || any(is.na(coef)) || coef[1] >= 0)
     return(x[which.max(y)])
-  # position = -b/(2a) (un-normalised poly: a*x^2 + b*x + c)
-  -coef[2] / (2 * coef[1])
+  pos <- -coef[2] / (2 * coef[1])
+  # If the vertex lies outside the fitting window the parabola is extrapolating
+  # (happens when the smoothed-derivative zero-crossing is offset from the raw
+  # apex, leaving the apex at the window edge). Fall back to the raw maximum.
+  if (pos < x[1L] || pos > x[length(x)]) return(x[which.max(y)])
+  pos
 }
 
 polyfit_3 <- function(x, y) {

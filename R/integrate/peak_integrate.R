@@ -45,6 +45,14 @@ library(parallel)
   c(left = left_val, right = right_val)
 }
 
+# AICc for a nonlinear least-squares fit with k parameters and n points.
+# Uses corrected AIC (Hurvich & Tsai 1989) which matters when n/k is small.
+.aic <- function(n, rmse, k) {
+  if (is.na(rmse) || n <= k + 1L) return(NA_real_)
+  aic  <- n * log(rmse^2) + 2L * k
+  aic  + 2L * k * (k + 1L) / (n - k - 1L)
+}
+
 # Numerical integration (trapezoidal) of y over RT[lo:hi].
 .trapz <- function(RT, y, lo, hi) {
   if (lo >= hi) return(0)
@@ -117,17 +125,18 @@ library(parallel)
         control  = nls.control(maxiter = 50, warnOnly = TRUE)),
     error = function(e) NULL)
 
+  n <- hi - lo + 1L
   if (is.null(fit)) {
     # fall back: analytical Gaussian from width at half-maximum
     sigma_hw <- max(1e-6, (RT[hi] - RT[lo]) / (2 * sqrt(2 * log(2))))
     area     <- H0 * sigma_hw * sqrt(2 * pi)
-    return(list(area = area, rmse = NA_real_, left_RT = RT[lo], right_RT = RT[hi]))
+    return(list(area = area, rmse = NA_real_, n = n, left_RT = RT[lo], right_RT = RT[hi]))
   }
   cf    <- coef(fit)
   area  <- abs(cf["H"]) * abs(cf["sigma"]) * sqrt(2 * pi)
   yhat  <- predict(fit)
   rmse  <- sqrt(mean((seg_y - yhat)^2))
-  list(area = area, rmse = rmse, left_RT = RT[lo], right_RT = RT[hi])
+  list(area = area, rmse = rmse, n = n, left_RT = RT[lo], right_RT = RT[hi])
 }
 
 .integrate_one_EGH <- function(signal_bc, RT, pk_idx, width_samp) {
@@ -149,10 +158,12 @@ library(parallel)
         control   = nls.control(maxiter = 50, warnOnly = TRUE)),
     error = function(e) NULL)
 
+  n <- hi - lo + 1L
   if (is.null(fit)) {
     # fall back to Gaussian
     res <- .integrate_one_gauss(signal_bc, RT, pk_idx, width_samp)
     res$rmse <- NA_real_
+    res$n    <- n
     return(res)
   }
   cf   <- coef(fit)
@@ -163,7 +174,7 @@ library(parallel)
   }
   yhat <- predict(fit)
   rmse <- sqrt(mean((seg_y - yhat)^2))
-  list(area = area, rmse = rmse, left_RT = RT[lo], right_RT = RT[hi])
+  list(area = area, rmse = rmse, n = n, left_RT = RT[lo], right_RT = RT[hi])
 }
 
 
@@ -203,6 +214,10 @@ integrate_peaks <- function(signal, RT, peaks,
     area_EGH       = NA_real_,
     fit_rmse_gauss = NA_real_,
     fit_rmse_EGH   = NA_real_,
+    aic_gauss      = NA_real_,
+    aic_EGH        = NA_real_,
+    area_AIC       = NA_real_,
+    aic_winner     = NA_character_,
     left_valley_RT = NA_real_,
     right_valley_RT= NA_real_,
     stringsAsFactors = FALSE
@@ -232,19 +247,42 @@ integrate_peaks <- function(signal, RT, peaks,
         out$right_valley_RT[i] <- r$right_RT
       }
     }
+    r_gauss <- r_egh <- NULL
     if ("gauss" %in% methods) {
-      r <- tryCatch(.integrate_one_gauss(signal_bc, RT, pk, w_samp),
-                    error = function(e) list(area = NA_real_, rmse = NA_real_,
-                                             left_RT = NA_real_, right_RT = NA_real_))
-      out$area_gauss[i]     <- r$area
-      out$fit_rmse_gauss[i] <- r$rmse
+      r_gauss <- tryCatch(.integrate_one_gauss(signal_bc, RT, pk, w_samp),
+                          error = function(e) list(area = NA_real_, rmse = NA_real_,
+                                                   n = NA_integer_,
+                                                   left_RT = NA_real_, right_RT = NA_real_))
+      out$area_gauss[i]     <- r_gauss$area
+      out$fit_rmse_gauss[i] <- r_gauss$rmse
+      out$aic_gauss[i]      <- .aic(r_gauss$n, r_gauss$rmse, 3L)
     }
     if ("EGH" %in% methods) {
-      r <- tryCatch(.integrate_one_EGH(signal_bc, RT, pk, w_samp),
-                    error = function(e) list(area = NA_real_, rmse = NA_real_,
-                                             left_RT = NA_real_, right_RT = NA_real_))
-      out$area_EGH[i]     <- r$area
-      out$fit_rmse_EGH[i] <- r$rmse
+      r_egh <- tryCatch(.integrate_one_EGH(signal_bc, RT, pk, w_samp),
+                        error = function(e) list(area = NA_real_, rmse = NA_real_,
+                                                 n = NA_integer_,
+                                                 left_RT = NA_real_, right_RT = NA_real_))
+      out$area_EGH[i]     <- r_egh$area
+      out$fit_rmse_EGH[i] <- r_egh$rmse
+      out$aic_EGH[i]      <- .aic(r_egh$n, r_egh$rmse, 4L)
+    }
+    if (!is.null(r_gauss) && !is.null(r_egh)) {
+      ag <- out$aic_gauss[i]; ae <- out$aic_EGH[i]
+      if (!is.na(ag) && !is.na(ae)) {
+        if (ag <= ae) {
+          out$area_AIC[i]   <- out$area_gauss[i]
+          out$aic_winner[i] <- "gauss"
+        } else {
+          out$area_AIC[i]   <- out$area_EGH[i]
+          out$aic_winner[i] <- "EGH"
+        }
+      } else if (!is.na(ag)) {
+        out$area_AIC[i]   <- out$area_gauss[i]
+        out$aic_winner[i] <- "gauss"
+      } else if (!is.na(ae)) {
+        out$area_AIC[i]   <- out$area_EGH[i]
+        out$aic_winner[i] <- "EGH"
+      }
     }
   }
 
@@ -254,6 +292,8 @@ integrate_peaks <- function(signal, RT, peaks,
                  if ("TS"    %in% methods) "area_TS",
                  if ("gauss" %in% methods) c("area_gauss", "fit_rmse_gauss"),
                  if ("EGH"   %in% methods) c("area_EGH",   "fit_rmse_EGH"),
+                 if ("gauss" %in% methods && "EGH" %in% methods)
+                   c("aic_gauss", "aic_EGH", "area_AIC", "aic_winner"),
                  "left_valley_RT", "right_valley_RT")
   out[, keep_cols]
 }

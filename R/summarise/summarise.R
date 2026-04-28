@@ -292,7 +292,7 @@ pipeline_summary <- function(signal_mat,
   area_scale <- if (!is.null(method_config)) method_config$area_scale else 1
 
   if (area_scale != 1) {
-    area_int_cols <- c("area_PD", "area_TS", "area_gauss", "area_EGH")
+    area_int_cols <- c("area_PD", "area_TS", "area_gauss", "area_EGH", "area_AIC")
     integ_list <- lapply(integ_list, function(ir) {
       if (is.null(ir) || nrow(ir) == 0L) return(ir)
       for (col in intersect(area_int_cols, names(ir)))
@@ -571,6 +571,21 @@ pipeline_summary <- function(signal_mat,
   # Assign peak names from method config (if supplied)
   if (!is.null(method_config) && nrow(peaks_combined) > 0L)
     peaks_combined <- match_peak_names(peaks_combined, method_config)
+
+  # Per-peak ensemble_method override: replace area_cons with the specified
+  # single-baseline area column for any peak that carries an ensemble_method
+  # field in the method config.
+  if (!is.null(method_config) && nrow(peaks_combined) > 0L) {
+    for (pk in method_config$peaks) {
+      mth <- pk[["ensemble_method"]]
+      if (!is.null(mth) && nzchar(mth)) {
+        col  <- paste0("area_", mth)
+        rows <- !is.na(peaks_combined$name) & peaks_combined$name == pk$name
+        if (any(rows) && col %in% names(peaks_combined))
+          peaks_combined$area_cons[rows] <- peaks_combined[[col]][rows]
+      }
+    }
+  }
 
   # ==========================================================================
   # Return ChromResult

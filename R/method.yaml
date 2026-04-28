@@ -24,14 +24,15 @@ peaks:
   - name: Ethane
     RT_ref:    2.03
     RT_window: 0.20
+    ensemble_method: PD
   - name: Propane
     RT_ref:    5.64
     RT_window: 0.30
   - name: iso-Butane
-    RT_ref:    16.24
+    RT_ref:    15.69
     RT_window: 0.30
   - name: n-Butane
-    RT_ref:    16.19
+    RT_ref:    16.33
     RT_window: 0.30
 
 # =========================================================================
@@ -39,7 +40,7 @@ peaks:
 # =========================================================================
 
 processing:
-  x_factor: 50       # block-average compression factor (integer)
+  x_factor: 10       # block-average compression factor (integer)
   denoise:   true    # run SASS denoising before baseline estimation
 
 # SASS denoising parameters (RF-tuned; only used when processing.denoise = true)
@@ -58,7 +59,7 @@ baseline:
 # Peak detection
 detection:
   amp_thresh:          0.06   # minimum peak height after baseline correction
-  smooth_width_factor: 7      # smooth_width = this × x_factor (samples)
+  smooth_width_factor: 35     # smooth_width = this × x_factor (samples)
 
 # Integration
 integration:

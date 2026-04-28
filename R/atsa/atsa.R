@@ -357,6 +357,7 @@ atsa <- function(mat, RT,
                  lmv_span         = 50L,
                  ref_peaks_RT     = NULL,
                  ref_peaks_width  = 0.1,
+                 min_peaks        = 3L,
                  verbose          = TRUE) {
 
   n  <- nrow(mat)
@@ -427,7 +428,7 @@ atsa <- function(mat, RT,
   }
 
   # ---- Build reference segments --------------------------------------------
-  segments <- .build_segments(ref_peaks, RT, segment_size)
+  segments <- .build_segments(ref_peaks, RT, segment_size, min_peaks)
   if (verbose) message(sprintf("[ATSA]   %d segments", nrow(segments)))
 
   # ---- Stage 2: preliminary alignment + warping ----------------------------

@@ -25,6 +25,7 @@ library(parallel)
 #   $config_names – character vector labelling each configuration
 
 source("./airpls/airPLS.R")
+source("./airpls/airPLS_liu.R")
 source("./arpls/doArPLS.R")
 source("./lmv/lmv.R")
 source("./flatfit/flatfit.R")
@@ -39,11 +40,11 @@ if (!exists("beads", mode = "function")) {
 # Algorithm wrappers  (signal → baseline vector)
 # =============================================================================
 
-.bl_airpls <- function(signal, lambda = 1e7, order = 2, wep = 0.1, p = 0.05) {
+.bl_airpls <- function(signal, lambda = 1e7, porder = 1L) {
   tryCatch({
     mat <- matrix(signal, nrow = 1)
-    res <- airPLS(mat, lambda = lambda, order = order, wep = wep, p = p)
-    as.numeric(res$Z[1, ])   # airPLS returns list(Xc, Z); Z[1,] is the baseline row
+    res <- airPLS_liu(mat, lambda = lambda, porder = porder)
+    as.numeric(res$Z[1, ])
   }, error = function(e) rep(0, length(signal)))
 }
 
@@ -89,9 +90,9 @@ if (!exists("beads", mode = "function")) {
 #' Each element is a named list: name, fun (function(signal) → baseline).
 default_ensemble_configs <- function() {
   list(
-    list(name = "airPLS_lam1e6",  fun = function(s) .bl_airpls(s, lambda = 1e6)),
-    list(name = "airPLS_lam1e7",  fun = function(s) .bl_airpls(s, lambda = 1e7)),
-    list(name = "airPLS_lam1e8",  fun = function(s) .bl_airpls(s, lambda = 1e8)),
+    list(name = "airPLS_liu_lam1e6", fun = function(s) .bl_airpls(s, lambda = 1e6)),
+    list(name = "airPLS_liu_lam1e7", fun = function(s) .bl_airpls(s, lambda = 1e7)),
+    list(name = "airPLS_liu_lam1e8", fun = function(s) .bl_airpls(s, lambda = 1e8)),
     list(name = "arPLS_lam1e6",   fun = function(s) .bl_arpls(s,  lambda = 1e6)),
     list(name = "arPLS_lam1e7",   fun = function(s) .bl_arpls(s,  lambda = 1e7)),
     list(name = "arPLS_lam1e8",   fun = function(s) .bl_arpls(s,  lambda = 1e8)),
@@ -140,7 +141,7 @@ baseline_ensemble <- function(signal, RT, peaks,
   baselines <- matrix(NA_real_, nrow = length(signal), ncol = n_cfg)  # stored compressed
   cfg_names <- vapply(configs, `[[`, "", "name")
 
-  cfg_results <- lapply(seq_len(n_cfg), function(k) {
+  cfg_results <- mclapply(seq_len(n_cfg), function(k) {
     if (verbose) message(sprintf("  [ensemble] %d/%d  %s", k, n_cfg, cfg_names[k]))
     bl_comp <- configs[[k]]$fun(signal)
     ar <- rep(NA_real_, n_peaks)
