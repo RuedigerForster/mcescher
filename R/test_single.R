@@ -137,7 +137,7 @@ df3_tmp  <- df3
 df3_tmp[inh_block_comp, ] <- df2[inh_block_comp, ]
 rm(inh_block_comp)
 df3_full     <- decompress_mat(df3_tmp, lt)
-df2_presass_full <- if (!is.null(df2_presass)) decompress_mat(df2_presass[1:lt, , drop = FALSE], lt) else NULL
+df2_presass_full <- if (!is.null(df2_presass)) decompress_mat(df2_presass, lt) else NULL
 rm(df2_presass)
 RT_full  <- RT[1:lt]
 rm(df3_tmp, RT); gc()

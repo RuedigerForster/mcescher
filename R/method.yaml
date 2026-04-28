@@ -22,13 +22,13 @@ peaks:
     RT_ref:    1.37
     RT_window: 0.20
   - name: Ethane
-    RT_ref:    1.81
+    RT_ref:    2.03
     RT_window: 0.20
   - name: Propane
     RT_ref:    5.64
     RT_window: 0.30
   - name: iso-Butane
-    RT_ref:    15.55
+    RT_ref:    16.24
     RT_window: 0.30
   - name: n-Butane
     RT_ref:    16.19

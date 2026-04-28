@@ -147,7 +147,7 @@ pipeline_summary <- function(signal_mat,
 
   # ---- 1. Peak detection per column ----------------------------------------
   if (verbose) message("[summary] Detecting peaks ...")
-  peaks_list <- mclapply(seq_len(n_chrom), function(j) {
+  peaks_list <- lapply(seq_len(n_chrom), function(j) {
     pk <- find_peaks(signal_bc[, j], RT,
                      smooth_width = smooth_width,
                      amp_thresh   = amp_thresh,
@@ -167,17 +167,16 @@ pipeline_summary <- function(signal_mat,
       }), ]
     }
     pk
-  }, mc.cores = getOption("mc.cores", 4L))
+  })
 
   # ---- 2. Integration per column -------------------------------------------
   if (verbose) message("[summary] Integrating peaks ...")
-  integ_list <- mclapply(seq_len(n_chrom), function(j)
+  integ_list <- lapply(seq_len(n_chrom), function(j)
     tryCatch(
       integrate_peaks(signal_bc[, j], RT, peaks_list[[j]],
                       baseline = NULL,
                       methods  = integrate_methods),
-      error = function(e) data.frame()),
-    mc.cores = getOption("mc.cores", 4L))
+      error = function(e) data.frame()))
 
   # ---- 3. Baseline ensemble (uncertainty) ----------------------------------
   ens_list <- vector("list", n_chrom)
@@ -212,7 +211,7 @@ pipeline_summary <- function(signal_mat,
       signal_bc_comp[signal_bc_comp < 0] <- 0
     }
 
-    ens_list <- mclapply(seq_len(n_chrom), function(j) {
+    ens_list <- lapply(seq_len(n_chrom), function(j) {
       if (verbose) message(sprintf("  column %d / %d", j, n_chrom))
       if (use_comp_ens) {
         tryCatch(
@@ -241,7 +240,7 @@ pipeline_summary <- function(signal_mat,
             RT_full          = NULL),
           error = function(e) NULL)
       }
-    }, mc.cores = getOption("mc.cores", 4L))
+    })
   }
 
   # ---- 4. LOD / LOQ --------------------------------------------------------
@@ -477,6 +476,52 @@ pipeline_summary <- function(signal_mat,
   ll_df <- ll_df[, setdiff(names(ll_df), qg_cols), drop = FALSE]
 
   # ==========================================================================
+  # Compute per-chromatogram traces for plot.ChromResult
+  # ==========================================================================
+  # Consensus baseline  = primary arPLS + weighted mean of ensemble residual baselines
+  # Uncertainty band    = ±2 × weighted SD of ensemble residual baselines
+  # Signal displayed    = pre-SASS (original) if available, else SASS-denoised
+  has_comp <- !is.null(signal_mat_comp) && !is.null(baseline_mat_comp) && !is.null(RT_comp)
+
+  traces_list <- lapply(seq_len(n_chrom), function(j) {
+    sig_j <- if (!is.null(signal_presass_mat)) signal_presass_mat[, j]
+             else signal_mat[, j]
+
+    primary_bl       <- baseline_mat[, j]
+    primary_bl_safe  <- primary_bl
+    primary_bl_safe[is.na(primary_bl_safe)] <- sig_j[is.na(primary_bl_safe)]
+
+    ens_j <- if (run_ensemble && !is.null(ens_list)) ens_list[[j]] else NULL
+
+    if (!is.null(ens_j) && !is.null(ens_j$baselines) &&
+        !is.null(ens_j$weights) && has_comp) {
+      w_j    <- ens_j$weights
+      bl_mat <- ens_j$baselines                          # n_comp × K
+
+      bl_mean_comp <- as.numeric(bl_mat %*% w_j)
+      bl_diff      <- sweep(bl_mat, 1, bl_mean_comp, "-")
+      bl_sd_comp   <- sqrt(rowSums(sweep(bl_diff^2, 2, w_j, "*")))
+
+      bl_mean_full <- approx(RT_comp, bl_mean_comp, xout = RT, rule = 2)$y
+      bl_sd_full   <- approx(RT_comp, bl_sd_comp,   xout = RT, rule = 2)$y
+
+      bl_cons <- primary_bl_safe + bl_mean_full
+      bl_lo   <- bl_cons - 2 * bl_sd_full
+      bl_hi   <- bl_cons + 2 * bl_sd_full
+    } else {
+      bl_cons <- primary_bl_safe
+      bl_lo   <- NULL
+      bl_hi   <- NULL
+    }
+
+    list(RT      = RT,
+         signal  = sig_j,
+         bl_cons = bl_cons,
+         bl_lo   = bl_lo,
+         bl_hi   = bl_hi)
+  })
+
+  # ==========================================================================
   # Build unified peaks table
   # ==========================================================================
   peaks_rows <- lapply(seq_len(n_chrom), function(j) {
@@ -549,6 +594,7 @@ pipeline_summary <- function(signal_mat,
     lod_loq       = ll_df,
     alignment     = if (!is.null(atsa_result)) align_df    else NULL,
     baseline_rmse = if (!is.null(RMSE_pred))  rmse_summary else NULL,
-    report        = report_lines
+    report        = report_lines,
+    traces        = traces_list
   ))
 }

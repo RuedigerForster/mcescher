@@ -30,10 +30,8 @@ source("./lmv/lmv.R")
 source("./flatfit/flatfit.R")
 source("./integrate/peak_integrate.R")
 
-# Compile and load the BEADS C++ baseline (compiled once per session).
-# sourceCpp caches the shared library; subsequent loads are fast.
-if (!exists("beads_baseline", mode = "function")) {
-  Rcpp::sourceCpp("./beads/BEADS/beads_rcpp.cpp")
+if (!exists("beads", mode = "function")) {
+  source("./beads/beads.R")
 }
 
 
@@ -71,14 +69,14 @@ if (!exists("beads_baseline", mode = "function")) {
 }
 
 # BEADS – Baseline Estimation and Denoising with Sparsity
-# (Ning, Selesnick, Duval 2014; C++ port via Rcpp/RcppEigen)
+# (Ning, Selesnick, Duval 2014; pure-R implementation)
 # fc: filter cut-off frequency (cycles/sample); smaller = slower baseline.
-# Default regularisation: lam0=0.4, lam1=4.0, lam2=3.2 (amp=0.8 scaling).
+# Default regularisation: lam0=0.4, lam1=4.0, lam2=3.2.
 .bl_beads <- function(signal, d = 1, fc = 0.01,
                        r = 6.0, lam0 = 0.4, lam1 = 4.0, lam2 = 3.2) {
   tryCatch({
-    as.numeric(beads_baseline(signal, d = d, fc = fc, r = r,
-                               lam0 = lam0, lam1 = lam1, lam2 = lam2))
+    beads(signal, d = d, fc = fc, r = r,
+          lam0 = lam0, lam1 = lam1, lam2 = lam2)$f
   }, error = function(e) rep(0, length(signal)))
 }
 
@@ -104,8 +102,7 @@ default_ensemble_configs <- function() {
     list(name = "flatfit_p005",    fun = function(s) .bl_flatfit(s, p = 0.05)),
     list(name = "flatfit_p010",    fun = function(s) .bl_flatfit(s, p = 0.10)),
     list(name = "BEADS_fc0005",    fun = function(s) .bl_beads(s, fc = 0.005)),
-    list(name = "BEADS_fc001",     fun = function(s) .bl_beads(s, fc = 0.01)),
-    list(name = "BEADS_fc005",     fun = function(s) .bl_beads(s, fc = 0.05))
+    list(name = "BEADS_fc001",     fun = function(s) .bl_beads(s, fc = 0.01))
   )
 }
 
@@ -143,7 +140,7 @@ baseline_ensemble <- function(signal, RT, peaks,
   baselines <- matrix(NA_real_, nrow = length(signal), ncol = n_cfg)  # stored compressed
   cfg_names <- vapply(configs, `[[`, "", "name")
 
-  cfg_results <- mclapply(seq_len(n_cfg), function(k) {
+  cfg_results <- lapply(seq_len(n_cfg), function(k) {
     if (verbose) message(sprintf("  [ensemble] %d/%d  %s", k, n_cfg, cfg_names[k]))
     bl_comp <- configs[[k]]$fun(signal)
     ar <- rep(NA_real_, n_peaks)
@@ -167,7 +164,7 @@ baseline_ensemble <- function(signal, RT, peaks,
         ar <- res[[area_col]]
     }
     list(bl = bl_comp, ar = ar)
-  }, mc.cores = getOption("mc.cores", 4L), mc.preschedule = FALSE)
+  })
 
   for (k in seq_len(n_cfg)) {
     baselines[, k] <- cfg_results[[k]]$bl
@@ -175,6 +172,7 @@ baseline_ensemble <- function(signal, RT, peaks,
   }
 
   # ---- summary per peak ----------------------------------------------------
+  ens_weights <- NULL
   if (n_peaks > 0L) {
     area_mean  <- rowMeans(areas, na.rm = TRUE)
     area_sd    <- apply(areas, 1, sd,  na.rm = TRUE)
@@ -182,7 +180,8 @@ baseline_ensemble <- function(signal, RT, peaks,
     area_max   <- apply(areas, 1, max, na.rm = TRUE)
     area_cv    <- ifelse(area_mean > 0, 100 * area_sd / area_mean, NA_real_)
 
-    cons       <- two_step_consensus(areas)
+    cons        <- two_step_consensus(areas)
+    ens_weights <- attr(cons, "weights")
 
     summary_df <- data.frame(
       peak_no    = seq_len(n_peaks),
@@ -211,7 +210,8 @@ baseline_ensemble <- function(signal, RT, peaks,
   list(areas        = areas,
        summary      = summary_df,
        baselines    = baselines,
-       config_names = cfg_names)
+       config_names = cfg_names,
+       weights      = ens_weights)
 }
 
 
@@ -247,13 +247,15 @@ two_step_consensus <- function(areas) {
   if (K < 2L || n_peaks < 2L) {
     a_mean <- rowMeans(areas, na.rm = TRUE)
     a_sd   <- if (K > 1L) apply(areas, 1, sd, na.rm = TRUE) else rep(NA_real_, n_peaks)
-    return(data.frame(peak_no   = seq_len(n_peaks),
-                      area_cons = a_mean,
-                      u_step1   = a_sd,
-                      Z_spread  = NA_real_,
-                      penalty   = 1,
-                      u_cons    = a_sd,
-                      U_cons    = 2 * a_sd))
+    fb <- data.frame(peak_no   = seq_len(n_peaks),
+                     area_cons = a_mean,
+                     u_step1   = a_sd,
+                     Z_spread  = NA_real_,
+                     penalty   = 1,
+                     u_cons    = a_sd,
+                     U_cons    = 2 * a_sd)
+    attr(fb, "weights") <- rep(1 / max(K, 1L), K)
+    return(fb)
   }
 
   # --- Step 1: correlation-based config weights ----------------------------
@@ -288,11 +290,13 @@ two_step_consensus <- function(areas) {
   # proportionally > 1 for heavy-tailed spread.
   penalty <- pmax(1, Z_spread / sqrt(2 / pi))
 
-  data.frame(peak_no   = seq_len(n_peaks),
-             area_cons = area_cons,
-             u_step1   = u1,
-             Z_spread  = Z_spread,
-             penalty   = penalty,
-             u_cons    = u1 * penalty,
-             U_cons    = 2 * u1 * penalty)
+  result_df <- data.frame(peak_no   = seq_len(n_peaks),
+                          area_cons = area_cons,
+                          u_step1   = u1,
+                          Z_spread  = Z_spread,
+                          penalty   = penalty,
+                          u_cons    = u1 * penalty,
+                          U_cons    = 2 * u1 * penalty)
+  attr(result_df, "weights") <- w
+  result_df
 }

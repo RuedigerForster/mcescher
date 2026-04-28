@@ -28,7 +28,8 @@
                               lod_loq,
                               alignment     = NULL,
                               baseline_rmse = NULL,
-                              report        = NULL) {
+                              report        = NULL,
+                              traces        = NULL) {
   structure(
     list(
       meta          = meta,
@@ -36,7 +37,8 @@
       lod_loq       = lod_loq,
       alignment     = alignment,
       baseline_rmse = baseline_rmse,
-      report        = report
+      report        = report,
+      traces        = traces
     ),
     class = "ChromResult"
   )
@@ -160,5 +162,83 @@ as.data.frame.ChromResult <- function(x, row.names = NULL,
       x$baseline_rmse$chrom %in% sel, , drop = FALSE]
 
   x$report <- NULL   # report is invalidated after subsetting
+  if (!is.null(x$traces))
+    x$traces <- x$traces[i]
   x
+}
+
+
+# ---------------------------------------------------------------------------
+# plot.ChromResult — raw signal + consensus baseline + ±2σ uncertainty band
+# ---------------------------------------------------------------------------
+plot.ChromResult <- function(x, chrom = 1L,
+                              col_signal = "steelblue",
+                              col_bl     = "firebrick",
+                              col_band   = "#CC000033",
+                              main       = NULL,
+                              xlab       = "Retention time (min)",
+                              ylab       = "Signal",
+                              xlim       = NULL,
+                              ylim       = NULL,
+                              ...) {
+  if (is.null(x$traces) || length(x$traces) < chrom || is.null(x$traces[[chrom]]))
+    stop("No trace data in this ChromResult — re-run pipeline_summary with run_ensemble = TRUE.")
+
+  tr   <- x$traces[[chrom]]
+  name <- if (!is.null(x$meta$col_names)) x$meta$col_names[[chrom]] else paste0("chrom_", chrom)
+
+  if (is.null(main))
+    main <- sprintf("%s  —  %s",
+                    if (!is.null(x$meta$method_name)) x$meta$method_name else "ChromResult",
+                    name)
+
+  pk <- if (!is.null(x$peaks) && nrow(x$peaks) > 0L)
+          x$peaks[x$peaks$chrom == name, , drop = FALSE]
+        else
+          data.frame()
+
+  yr <- range(c(tr$signal,
+                if (!is.null(tr$bl_hi)) tr$bl_hi else tr$bl_cons,
+                if (!is.null(tr$bl_lo)) tr$bl_lo else tr$bl_cons),
+              na.rm = TRUE)
+  yr[1] <- min(yr[1], 0)
+
+  plot(tr$RT, tr$signal, type = "n",
+       xlim = if (is.null(xlim)) range(tr$RT) else xlim,
+       ylim = if (is.null(ylim)) yr else ylim,
+       xlab = xlab, ylab = ylab, main = main, ...)
+
+  # Uncertainty band
+  if (!is.null(tr$bl_lo) && !is.null(tr$bl_hi)) {
+    ok <- !is.na(tr$bl_lo) & !is.na(tr$bl_hi)
+    polygon(c(tr$RT[ok], rev(tr$RT[ok])),
+            c(tr$bl_hi[ok], rev(tr$bl_lo[ok])),
+            col = col_band, border = NA)
+  }
+
+  lines(tr$RT, tr$signal,  col = col_signal, lwd = 1)
+  lines(tr$RT, tr$bl_cons, col = col_bl,     lwd = 1.5, lty = 2)
+  abline(h = 0, col = "grey70", lty = 3)
+
+  # Peak markers and labels inside plot area (just below the top)
+  if (nrow(pk) > 0L) {
+    abline(v = pk$RT, col = "orange", lty = 2, lwd = 0.8)
+    lbl <- if ("name" %in% names(pk))
+             ifelse(is.na(pk$name), sprintf("%.3f", pk$RT), pk$name)
+           else
+             sprintf("%.3f", pk$RT)
+    y_top <- par("usr")[4]
+    text(pk$RT, y_top, lbl, adj = c(1.1, 1), srt = 90,
+         cex = 0.65, xpd = FALSE)
+  }
+
+  legend("topright", bty = "n",
+         legend = c("Signal", "Consensus baseline", "\u00b12\u03c3 band"),
+         col    = c(col_signal, col_bl, adjustcolor(col_band, alpha.f = 1)),
+         lty    = c(1, 2, NA),
+         lwd    = c(1, 1.5, NA),
+         pch    = c(NA, NA, 15),
+         pt.cex = 1.8)
+
+  invisible(x)
 }
