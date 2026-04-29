@@ -1,0 +1,45 @@
+Package: mcescher
+Title: Chromatographic Signal Processing Pipeline
+Version: 0.1.0
+Authors@R: c(
+    person("Ruediger", "Forster", email = "ruediger.forster@gmx.de",
+           role = c("aut", "cre")),
+    person("Zhimin", "Zhang", role = "cph",
+           comment = "airPLS algorithm (R/airPLS.R, R/airPLS_liu.R)"),
+    person("Sung-June", "Baek", role = "cph",
+           comment = "arPLS algorithm (R/doArPLS.R)"),
+    person("Xiaoran", "Ning", role = "cph",
+           comment = "BEADS algorithm and ABfilt helper (R/beads.R, R/sass.R)"),
+    person("Ivan W.", "Selesnick", role = "cph",
+           comment = "BEADS and SASS algorithms (R/beads.R, R/sass.R)"),
+    person("Laurent", "Duval", role = "cph",
+           comment = "BEADS algorithm (R/beads.R)"),
+    person("Bayer AG", role = "cph",
+           comment = "FlatFit algorithm from MOCCA package (R/flatfit.R)")
+  )
+Description: Provides a pipeline for processing gas chromatographic data:
+    automatic time-shift alignment (ATSA), sparsity-assisted signal smoothing
+    (SASS), multiple baseline estimation algorithms with ensemble uncertainty
+    quantification, peak detection and integration, and LOD/LOQ estimation.
+    Designed for reproducible processing of single-channel GC signals from
+    standard detectors.
+Depends: R (>= 3.5.0)
+License: GPL (>= 3)
+Copyright: see inst/COPYRIGHTS
+Encoding: UTF-8
+Roxygen: list(markdown = TRUE)
+RoxygenNote: 7.3.3
+Suggests:
+    chromConverter,
+    ncdf4
+Imports:
+    Matrix,
+    pracma,
+    yaml,
+    segmented,
+    runner,
+    parallel,
+    grDevices,
+    graphics,
+    stats,
+    utils

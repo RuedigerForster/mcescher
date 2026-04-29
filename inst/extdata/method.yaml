@@ -1,0 +1,110 @@
+# method_ude.yaml — GC-FID OGE/UDE metabolomics mix
+# =========================================================================
+# USER-SERVICEABLE SETTINGS
+# =========================================================================
+
+method:
+  name: "GC-FID OGE/UDE mix"
+  detector: FID
+  RT_unit: min
+
+# Retention-time regions to exclude from baseline estimation and detection.
+inhibit:
+  - [0.00, 4.00]     # solvent peak (MeOH) and front
+  - [5.30, 5.40]     # segment break: early / central
+  - [13.10, 13.20]   # segment break: central / late
+  - [17.80, 19.00]   # tail region
+
+# Named peaks matched by nearest RT within window.
+peaks:
+  - name: Dekan
+    RT_ref:    4.25
+    RT_window: 0.25
+    merge_window: 0.20
+  - name: Thiophen
+    RT_ref:    4.65
+    RT_window: 0.25
+  - name: Thiazol
+    RT_ref:    8.13
+    RT_window: 0.25
+  - name: unknown
+    RT_ref:    9.68
+    RT_window: 0.25
+  - name: 2-Ethylhexanol
+    RT_ref:    10.52
+    RT_window: 0.25
+  - name: Methyl Decanoat
+    RT_ref:    11.44
+    RT_window: 0.25
+  - name: Lauric Aldehyd
+    RT_ref:    12.35
+    RT_window: 0.25
+  - name: Naphtalin
+    RT_ref:    12.73
+    RT_window: 0.25
+  - name: Methyl Myristate
+    RT_ref:    14.29
+    RT_window: 0.25
+  - name: Methyl Stearate
+    RT_ref:    16.48
+    RT_window: 0.40
+    merge_window: 0.40
+    ensemble_method: EGH
+    debug_baselines: true
+  - name: PCB No11
+    RT_ref:    17.23
+    RT_window: 0.25
+
+# =========================================================================
+# ADVANCED TUNING  (change with care)
+# =========================================================================
+
+processing:
+  x_factor: 10       # block-average compression factor (integer)
+  denoise:   true    # run SASS denoising before baseline estimation
+
+# SASS denoising parameters
+denoising:
+  d:   1
+  fc:  0.03      # default (used when no segment override matches)
+  K:   1
+  lam: 0.1
+
+# Per-segment overrides applied to each inhibit-defined active segment.
+# Segment is matched by its start RT (RT2[seg["begin"]]).
+denoising_segments:
+  - rt_min: 4.00
+    rt_max: 5.30    # early: Decane + Thiophen — minimal filtering
+    fc: 0.05
+    lam: 0.05
+  - rt_min: 5.40
+    rt_max: 13.10   # central: Thiazol through Naphtalin — current setting
+    fc: 0.03
+    lam: 0.10
+  - rt_min: 13.20
+    rt_max: 18.00   # late: Myristate through PCB — more smoothing
+    fc: 0.02
+    lam: 0.20
+
+# Primary baseline algorithm
+baseline:
+  algorithm: arPLS
+  lambda:    1.0e7
+  ratio:     1.0e-6
+
+# Regions where arPLS is replaced by linear interpolation between the
+# boundary points.  Applied to both the primary baseline and every
+# ensemble baseline, so the CV is not inflated by baseline ambiguity here.
+baseline_inhibit:
+  - [16.00, 17.10]   # Methyl Stearate + rider: suppress convex artefact
+
+# Peak detection
+detection:
+  amp_thresh:          0.05
+  smooth_width_factor: 35
+
+# Integration
+integration:
+  methods:         [PD, TS, gauss, EGH]
+  ensemble_method: TS
+  run_ensemble:    true

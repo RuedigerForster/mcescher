@@ -1,0 +1,26 @@
+BEADS -- Baseline Estimation and Denoising with Sparsity
+MATLAB implementation by Xiaoran Ning, Ivan W. Selesnick, Laurent Duval.
+
+Applies to: R/beads.R and the ABfilt() function in R/sass.R
+  (Pure-R port of the original MATLAB code)
+  Source: http://eeweb.poly.edu/iselesni/BEADS/
+          (supplement to Ning, Selesnick, Duval 2014)
+
+The original MATLAB code is made available by the authors for academic and
+research use. Users of this R port must comply with the terms under which
+the original MATLAB code is distributed and must cite the following reference
+in any publication that uses this code:
+
+  Ning X, Selesnick IW, Duval L (2014).
+  "Chromatogram baseline estimation and denoising using sparsity (BEADS)."
+  Chemometrics and Intelligent Laboratory Systems, 139, 156-167.
+  doi:10.1016/j.chemolab.2014.09.014
+
+The ABfilt helper routine and the SASS (Sparsity-Assisted Signal Smoothing)
+algorithm in R/sass.R originate from the same research group. If SASS is
+used, please additionally cite:
+
+  Selesnick IW (2017).
+  "Sparsity-Assisted Signal Smoothing (revisited)."
+  Wavelets and Sparsity XVII, Proc. SPIE 10394.
+  doi:10.1117/12.2274187

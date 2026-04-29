@@ -1,7 +1,7 @@
 # mcescher
 
 <p align="center">
-  <img src="logo.png" width="160" alt="mcescher logo"/>
+  <img src="man/figures/mcescher.png" width="160" alt="mcescher logo"/>
 </p>
 
 > Automated chromatographic peak integration with uncertainty quantification for target compound analysis.
@@ -50,8 +50,6 @@ We expect the ideal peak areas to be affected only by Gaussian noise, and their 
   reported separately and combined
 - **Peak integration methods** — Perpendicular Drop, Tangent Skim, Gaussian fit, EGH fit
 - **Time-shift alignment** — ATSA (automatic time-shift alignment) across sample batches
-- **Multi-CDS import** via [chromConverter](https://cran.r-project.org/package=chromConverter)
-  (CDF/AIA, Waters ARW, Agilent, Shimadzu, and others)
 - **LOD / LOQ** — ICH Q2(R1) signal-to-noise estimation per chromatogram
 
 ---
@@ -60,7 +58,11 @@ We expect the ideal peak areas to be affected only by Gaussian noise, and their 
 
 > Early development. API is not yet stable.
 
-The pipeline runs end-to-end on single-channel GC-FID/TCD data in CDF/AIA format.
+The package accepts a pre-imported numeric matrix as input (see Quick start below).
+Chromatogram import from CDF/AIA or vendor-specific formats is not bundled —
+use [chromConverter](https://cran.r-project.org/package=chromConverter) or
+similar for file reading, then pass the resulting matrix to `pipeline_summary()`.
+
 The ML integration model (the core of the package name) is in the design phase;
 the current release focuses on the classical baseline-ensemble pipeline that will
 generate training labels.
@@ -81,20 +83,33 @@ CRAN submission is planned once the API stabilises.
 
 ## Quick start
 
+The pipeline takes a numeric matrix as its primary input:
+
+| Argument | Type | Description |
+|---|---|---|
+| `signal_mat` | `n_samples × n_chroms` matrix | Aligned, SASS-denoised signal |
+| `baseline_mat` | `n_samples × n_chroms` matrix | Primary arPLS baseline (NA in inhibited regions) |
+| `RT` | numeric vector (length `n_samples`) | Retention time in minutes |
+
+`signal_mat` must have a `retention_time` attribute (minutes) set on the column dimension, or `RT` must be passed explicitly.
+
 ```r
-library(mcescher)   # package name on CRAN will be mcescher
+library(mcescher)
 
-# Import CDF files from a directory
-chromas <- import_chromas("path/to/data/", pattern = "[.]cdf$")
-
-# Run the full pipeline on one chromatogram
+# Assume `sig`, `bl`, and `RT` are prepared from your import step
+cfg    <- read_method_config("method.yaml")
 result <- pipeline_summary(
-  signal_mat  = chromas,
-  method_yaml = "method.yaml"
+  signal_mat   = sig,
+  baseline_mat = bl,
+  RT           = RT,
+  method_config = cfg,
+  run_ensemble  = TRUE
 )
 
-# Peak table with areas and expanded uncertainties
-print(result$peaks)
+# ChromResult: peaks with areas, uncertainties, LOD/LOQ
+print(result)
+as.data.frame(result)      # the peaks table
+plot(result, chrom = 1)    # signal + consensus baseline + ±2σ band
 ```
 
 ---
@@ -102,10 +117,7 @@ print(result$peaks)
 ## Pipeline overview
 
 ```
-CDF / ARW file
-      │
-      ▼
- chromConverter::read_cdf()          # multi-CDS import
+n_samples × n_chroms signal matrix  (+ RT vector)
       │
       ▼
  Block-average compression (×50)     # reduce to ~20 Hz working resolution
@@ -179,30 +191,66 @@ CDF / ARW file
 
 ## Method configuration
 
-The pipeline is controlled by a YAML file:
+The pipeline is controlled by a YAML file passed to `read_method_config()`:
 
 ```yaml
 method:
-  name: "GC-FID light hydrocarbons"
-  RT_unit: min
+  name: "GC light hydrocarbons"
+  RT_unit: min          # "min" scales areas to counts·s (×60)
 
 inhibit:
-  - [0.00, 1.10]    # solvent front
-  - [20.38, 27.00]  # tail region
+  - [0.00, 1.10]        # valve-switching artifacts, solvent front
+  - [20.38, 27.00]      # tail region
+
+# Baseline-inhibit: RT windows replaced by linear interpolation in the baseline.
+# Useful when a large spike would distort the ensemble algorithms.
+baseline_inhibit:
+  - [0.00, 1.20]
 
 peaks:
   - name: Methane
     RT_ref:    1.37
     RT_window: 0.20
+    # merge_window: merge all detected sub-peaks within ±N min of RT_ref into one.
+    # merge_window: 0.15
+    # ensemble_method: override the ensemble consensus with a single-method area.
+    # ensemble_method: TS
 
 processing:
-  x_factor: 50      # compression factor
+  x_factor: 50          # block-average compression factor
   denoise:   true
+
+# Global denoising parameters (SASS):
+denoising:
+  d:   1
+  fc:  0.011
+  K:   1
+  lam: 0.2
+
+# Per-segment denoising overrides (e.g. solvent front needs different fc):
+denoising_segments:
+  - rt_min: 0.0
+    rt_max: 2.0
+    fc:  0.03
+    lam: 0.5
+
+baseline:
+  lambda: 1.0e7
+  ratio:  1.0e-6
+
+detection:
+  amp_thresh:          0
+  smooth_width_factor: 3
 
 integration:
   methods: [PD, TS, gauss, EGH]
-  run_ensemble: true
+  run_ensemble:    true
   ensemble_method: TS
+
+# debug_baselines: save a PNG of all ensemble baselines for this peak.
+# peaks:
+#   - name: PropanePeak
+#     debug_baselines: true
 ```
 
 ---

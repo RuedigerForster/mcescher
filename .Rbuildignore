@@ -1,0 +1,24 @@
+^\.Rproj\.user$
+^\.Rhistory$
+^\.RData$
+^\.Ruserdata$
+^\.gitignore$
+^\.claude$
+^\.mypy_cache$
+^Integration\.Rproj$
+^README\.html$
+^compare_empower\.py$
+^Ressources/
+^data/(?!Grob_mix\.RData$)
+^db/
+^doc/
+^src/
+^R/orphans/
+^R/other sources/
+^R/characteriseInstrument/
+^R/.*\.png$
+^R/.*\.py$
+^R/.*\.txt$
+^R/.*\.Rproj$
+^R/.*LICENSE.*$
+^inst/extdata/method_UNIS\.yaml$

@@ -1,0 +1,110 @@
+The mcescher package contains code ported or adapted from the following
+third-party sources.  Each section gives the original author(s), the
+corresponding source file, the governing license, and the primary
+literature reference.
+
+-------------------------------------------------------------------------------
+airPLS  (R/airPLS.R)
+-------------------------------------------------------------------------------
+Original MATLAB code: Zhimin Zhang, Central South University, 2011.
+Ported to R by the mcescher authors.
+License: BSD 3-Clause (see inst/licenses/LICENSE_BSD3.txt)
+
+Primary reference:
+  Zhang Z-M, Chen S, Liang Y-Z (2010).
+  "Baseline correction using adaptive iteratively reweighted penalized
+  least squares."
+  Analyst, 135(5), 1138-1146.
+  doi:10.1039/b922045c
+
+Supporting references used in the original MATLAB code:
+  Eilers PHC (2003). "A perfect smoother."
+  Anal. Chem., 75(14), 3631-3636. doi:10.1021/ac034173t
+
+  Eilers PHC, Boelens HFM (2005). "Baseline Correction with Asymmetric
+  Least Squares Smoothing."
+
+  Gan F, Ruan G, Mo J (2006). "Baseline correction by improved iterative
+  polynomial fitting with automatic threshold."
+  Chemom. Intell. Lab. Syst., 82(1-2), 59-65.
+  doi:10.1016/j.chemolab.2005.08.009
+
+Python port used as secondary reference:
+  https://github.com/zmzhang/airPLS
+
+-------------------------------------------------------------------------------
+airPLS variant by Shixuan Liu  (R/airPLS_liu.R)
+-------------------------------------------------------------------------------
+Pure-R port of the Python implementation by Shixuan Liu (2014).
+Source: https://github.com/zmzhang/airPLS
+License: BSD 3-Clause (see inst/licenses/LICENSE_BSD3.txt)
+
+Reference: Zhang et al. (2010), as above.
+
+-------------------------------------------------------------------------------
+arPLS / doArPLS  (R/doArPLS.R)
+-------------------------------------------------------------------------------
+Original MATLAB code: Sung-June Baek, Spectroscopy Laboratory,
+Chung-Ang University, 2015.
+Ported to R by the mcescher authors.
+License: BSD 3-Clause (see inst/licenses/LICENSE_BSD3.txt)
+
+Reference:
+  Baek S-J, Park A, Ahn Y-J, Choo J (2015).
+  "Baseline correction using asymmetrically reweighted penalized least
+  squares smoothing."
+  Analyst, 140(1), 250-257.
+  doi:10.1039/c4an01061b
+
+-------------------------------------------------------------------------------
+BEADS  (R/beads.R) and ABfilt helper  (R/sass.R)
+-------------------------------------------------------------------------------
+Pure-R port of the MATLAB implementation by Xiaoran Ning
+(Polytechnic School of Engineering, New York University).
+Source: supplement to the reference below; also distributed via
+  http://eeweb.poly.edu/iselesni/BEADS/
+License: see inst/licenses/LICENSE_BEADS.txt
+
+Reference:
+  Ning X, Selesnick IW, Duval L (2014).
+  "Chromatogram baseline estimation and denoising using sparsity (BEADS)."
+  Chemometrics and Intelligent Laboratory Systems, 139, 156-167.
+  doi:10.1016/j.chemolab.2014.09.014
+
+Note: the ABfilt() helper in R/sass.R is the band-pass filter construction
+routine shared between BEADS and SASS (Sparsity-Assisted Signal Smoothing)
+and originates from the same NYU research group (Selesnick).
+
+Reference for SASS:
+  Selesnick IW (2017).
+  "Sparsity-Assisted Signal Smoothing (revisited)."
+  Wavelets and Sparsity XVII, Proc. SPIE 10394.
+  doi:10.1117/12.2274187
+
+-------------------------------------------------------------------------------
+FlatFit  (R/flatfit.R)
+-------------------------------------------------------------------------------
+Pure-R port of the FlatFit baseline algorithm from the MOCCA package
+(Multi-Objective Chromatographic Analysis).
+Copyright 2021 Bayer AG.
+Source: https://github.com/bayer-science-for-a-better-life/mocca
+License: MIT (see inst/licenses/LICENSE_MIT_MOCCA.txt)
+
+-------------------------------------------------------------------------------
+Algorithms implemented independently by the mcescher authors
+-------------------------------------------------------------------------------
+The following files contain original implementations (not ported from
+third-party code), though they are based on published algorithms:
+
+  R/atsa.R    -- Automatic Time-Shift Alignment
+    Reference: Zheng C, Zhang Z, Liang Y (2017).
+    "Automatic time-shift alignment method for chromatographic data."
+    Scientific Reports, 7, 256. doi:10.1038/s41598-017-00390-7
+
+  R/lmv.R     -- Local Minimum Values / Running Standard Average baseline
+  R/peak_detect.R, R/peak_integrate.R, R/compress.R, R/inhibit.R,
+  R/chrom_result.R, R/summarise.R, R/lod_loq.R, R/to_wide.R,
+  R/read_config.R
+
+Copyright 2026 Ruediger Forster <ruediger.forster@gmx.de>
+License: GPL (>= 3)

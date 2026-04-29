@@ -3,7 +3,13 @@
 .RData
 .Ruserdata
 Ressources/
-data/
+data/*
+!data/Grob_mix.RData
 R/other sources/
 R/orphans/
+R/characteriseInstrument/
 src/
+doc/statistical_assessment.*
+db/
+R/*.png
+inst/extdata/method_UNIS.yaml
