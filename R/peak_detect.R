@@ -116,7 +116,7 @@
                        RT     = pos,
                        height = h,
                        width  = w,
-                       area   = 1.0646 * h * w,
+                       area   = GAUSS_AREA_FACTOR * h * w,
                        lo_idx = lo_w,
                        hi_idx = hi_w)
   }

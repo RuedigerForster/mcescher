@@ -3,6 +3,8 @@
 #'
 #' Automated chromatographic peak integration with uncertainty quantification
 #' for target compound analysis.
+#' @import Matrix
+#' @import methods
 #' @importFrom grDevices adjustcolor dev.off png
 #' @importFrom graphics abline legend lines par polygon text
 #' @importFrom stats approx coef convolve cor gaussian glm median nls

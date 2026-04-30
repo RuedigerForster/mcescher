@@ -67,7 +67,7 @@
     merged$lo_idx <- min(sub$lo_idx)
     merged$hi_idx <- max(sub$hi_idx)
     merged$width  <- RT[merged$hi_idx] - RT[merged$lo_idx]
-    merged$area   <- 1.0646 * merged$height * merged$width
+    merged$area   <- GAUSS_AREA_FACTOR * merged$height * merged$width
 
     pk <- pk[!in_win, , drop = FALSE]
     pk <- rbind(pk, merged)
