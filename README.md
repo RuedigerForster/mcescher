@@ -4,156 +4,197 @@
   <img src="man/figures/mcescher.png" width="160" alt="mcescher logo"/>
 </p>
 
-> Automated chromatographic peak integration with uncertainty quantification for target compound analysis.
+> Automated chromatographic peak integration with GUM-compliant uncertainty quantification.
 
 ---
 
-## Motivation
+## For ML researchers
 
-Manual peak integration is a crucial step in chromatographic data analysis
-that still depends heavily on expert judgement. Results vary between operators,
-software versions, and integration parameter sets — yet the reported area is
-usually presented as a single number with no uncertainty attached.
+Gas chromatography produces a signal trace over time. Compounds elute as peaks;
+their areas encode concentration. Training a neural network to integrate these
+peaks requires reliable (signal, area) pairs — but most GC software ships areas
+with no indication of whether the integration was clean or marginal.
 
-**mcescher** addresses this by treating baseline placement as an ensemble
-estimation problem: multiple baseline algorithms and parameter combinations are
-run in parallel, their results are combined using a correlation-weighted consensus,
-and a realistic uncertainty is derived from three independent sources:
+**mcescher** runs 15 baseline algorithms in parallel, selects a consensus by
+mutual agreement, and attaches a three-component GUM uncertainty to every area.
+That uncertainty is a direct, quantitative label-quality signal: a 0.2 % CV is
+a clean label; a 40 % CV is noise.
 
-| Component | Symbol | Source |
-|---|---|---|
-| Baseline placement ambiguity | u_baseline | Two-step ensemble (correlation weights + Z-score penalty) |
-| Detector noise propagated through integration | u_noise | Noise floor × √(peak width × Δt) |
-| SASS denoising distortion | u_sass | \|∫(pre − post SASS)\| over peak window |
+### Get a training set in three steps
 
-These combine in quadrature: **U = 2 · √(u_baseline² + u_noise² + u_sass²)** (k = 2, ~95 %).
+```r
+# install.packages(c("remotes", "nanoparquet", "chromConverter"))
+# remotes::install_github("RuedigerForster/mcescher")
+
+library(mcescher)
+
+# 1. Run mcescher on your data (see §Running mcescher below)
+#    peaks_raw <- peaks(pipeline_summary(...))
+
+# 2. Apply quality gates
+peaks_ok <- peaks_raw |>
+  replicate_quality_gate() |>   # remove within-sequence outliers
+  loq_filter()             |>   # remove below-LOQ labels
+  (\(df) df[df$quality_ok, ])()
+
+# 3. Export paired (signal window, area, uncertainty) to Parquet
+export_training_set(
+  peaks_df       = peaks_ok,
+  data_root      = "path/to/chromatogram/files",
+  output_parquet = "training_set.parquet"
+)
+```
+
+Read in Python:
+
+```python
+import pandas as pd, numpy as np
+
+df = pd.read_parquet("training_set.parquet")
+X  = np.stack(df["signal"])       # (N, 512) float32 — normalised signal window
+y  = df["area_cons"].values        # (N,)  area in mV·s
+u  = df["u_cons"].values           # (N,)  GUM k=1 standard uncertainty
+cv = df["area_cv_pct"].values      # (N,)  relative uncertainty in %
+```
+
+### Understanding the quality columns
+
+| Column | What it means for training |
+|---|---|
+| `area_cv_pct` | Relative standard uncertainty of the label (%). Filter on this. Labels with CV > 5 % are near the detection limit — the area estimate is dominated by baseline noise, not peak signal. |
+| `u_cons` | Absolute standard uncertainty (mV·s, k=1). Use as per-sample loss weight: `loss = ((ŷ - y) / u_cons)²` gives higher weight to clean labels. |
+| `Z_spread` | Peak difficulty score. High values indicate fused peaks, sloping baseline, or other integration challenges. |
+| `aic_winner` | Integration method selected by AICc (PD / TS / gauss / EGH). Consistent method across replicates is a sign of a well-resolved peak. |
+
+### Quality gate parameters
+
+```r
+replicate_quality_gate(
+  peaks_df,
+  min_n          = 5,    # minimum replicates before gate activates
+  z_threshold    = 3.5,  # Iglewicz-Hoaglin modified Z-score cutoff
+  max_seq_cv_pct = 3.0   # flag entire compound if sequence CV% exceeds this
+)
+
+loq_filter(
+  peaks_df,
+  max_area_cv_pct = 5.0  # drop rows where area_cv_pct exceeds this
+)
+```
 
 ---
 
-## Premises
+## Reference dataset
 
-Current instrument technology is highly advanced, so that the sampled signal trace can be considered artifact-free in most cases. The dominant uncertainty sources of the peak areas are the injected sample amounts — which, because all peaks share the same injection, introduce a high degree of correlation across the chromatogram — and the subjective estimation of the baseline course. Consequently, a baseline that preserves this inter-peak correlation is preferred as the consensus estimate.
+The OGE-UDE Grob mix dataset (2693 GC-FID replicate injections, Agilent
+ChemStation .D format) used to validate mcescher and generate training labels
+for the **stanislaw** CNN integrator is published on Zenodo:
 
-We expect the ideal peak areas to be affected only by Gaussian noise, and their uncertainties to follow a smooth curve (dominated by detector non-linearity). Occasionally, baseline drift and wandering may disturb individual peaks and break this pattern. Therefore, in a second step, Z-scores of the peak areas are calculated relative to the expected smooth curve, and peaks with deviating Z-scores have their uncertainty inflated accordingly.
+> Görs, P. E., Schmitz, O., Forster, R. (2026).
+> *Grob Mix GC-FID Replicate Injections for Atmospheric Pressure Peak Area
+> Correction (APPAC) and Integration Benchmarking.*
+> Zenodo. https://doi.org/10.5281/zenodo.19946728
 
----
-
-## Features
-
-- **Multi-algorithm baseline ensemble** — airPLS, arPLS, LMV-RSA, FlatFit, BEADS;
-  15 parameter combinations per run
-- **Two-step consensus**
-  - *Step 1*: correlation-based config weights — globally rogue baselines suppressed
-  - *Step 2*: Z-score penalty — locally difficult peaks (fused, sloping baseline) flagged
-    and their uncertainty inflated
-- **Three-component uncertainty** — baseline ambiguity, noise, and denoising distortion
-  reported separately and combined
-- **Peak integration methods** — Perpendicular Drop, Tangent Skim, Gaussian fit, EGH fit
-- **Time-shift alignment** — ATSA (automatic time-shift alignment) across sample batches
-- **LOD / LOQ** — ICH Q2(R1) signal-to-noise estimation per chromatogram
-
----
-
-## Status
-
-> Early development. API is not yet stable.
-
-The package accepts a pre-imported numeric matrix as input (see Quick start below).
-Chromatogram import from CDF/AIA or vendor-specific formats is not bundled —
-use [chromConverter](https://cran.r-project.org/package=chromConverter) or
-similar for file reading, then pass the resulting matrix to `pipeline_summary()`.
-
-The ML integration model (the core of the package name) is in the design phase;
-the current release focuses on the classical baseline-ensemble pipeline that will
-generate training labels.
+This dataset is not bundled with the package. Download and unpack it, then
+point `data_root` in `export_training_set()` at the extracted directory.
 
 ---
 
 ## Installation
 
 ```r
-# From GitHub (development version)
-# install.packages("remotes")
 remotes::install_github("RuedigerForster/mcescher")
 ```
 
-CRAN submission is planned once the API stabilises.
+Optional dependencies (install as needed):
+
+```r
+install.packages(c(
+  "nanoparquet",    # Parquet export via export_training_set()
+  "chromConverter", # reading Agilent .D directories
+  "ncdf4"           # reading AIA/CDF files
+))
+```
+
+CRAN submission planned once the API stabilises.
 
 ---
 
-## Quick start
+## Running mcescher
 
-The pipeline takes a numeric matrix as its primary input:
-
-| Argument | Type | Description |
-|---|---|---|
-| `signal_mat` | `n_samples × n_chroms` matrix | Aligned, SASS-denoised signal |
-| `baseline_mat` | `n_samples × n_chroms` matrix | Primary arPLS baseline (NA in inhibited regions) |
-| `RT` | numeric vector (length `n_samples`) | Retention time in minutes |
-
-`signal_mat` must have a `retention_time` attribute (minutes) set on the column dimension, or `RT` must be passed explicitly.
+The pipeline takes a numeric matrix as its primary input.
 
 ```r
 library(mcescher)
 
-# Assume `sig`, `bl`, and `RT` are prepared from your import step
 cfg    <- read_method_config("method.yaml")
 result <- pipeline_summary(
-  signal_mat   = sig,
-  baseline_mat = bl,
-  RT           = RT,
+  signal_mat   = sig,      # n_samples × n_chroms numeric matrix
+  baseline_mat = bl,       # arPLS baseline matrix (same dimensions)
+  RT           = RT,       # retention time vector (minutes)
   method_config = cfg,
   run_ensemble  = TRUE
 )
 
-# ChromResult: peaks with areas, uncertainties, LOD/LOQ
-print(result)
-as.data.frame(result)      # the peaks table
+peaks(result)              # data frame of areas, uncertainties, LOD/LOQ
 plot(result, chrom = 1)    # signal + consensus baseline + ±2σ band
 ```
 
+For full-batch processing of Agilent .D directories see
+`R/orphans/run_ude.R`, which handles ATSA alignment, SASS denoising, baseline
+estimation, integration, and quality gating for an entire dataset in one call.
+
 ---
 
-## Pipeline overview
+## How it works
 
 ```
-n_samples × n_chroms signal matrix  (+ RT vector)
+n_samples × n_chroms signal matrix
       │
       ▼
- Block-average compression (×50)     # reduce to ~20 Hz working resolution
+ Block-average compression (×50)
       │
       ▼
- ATSA alignment                      # correct retention-time drift across runs
+ ATSA alignment                  — correct retention-time drift across runs
       │
       ▼
- SASS denoising                      # sparse signal denoising (L1 regularisation)
-      │  └─ save pre-SASS signal ────────────────────────► u_sass
+ SASS denoising                  — sparse signal smoothing (L1)
+      │  └─ save pre-SASS ──────────────────────────────────► u_sass
       ▼
- arPLS baseline                      # primary baseline for peak detection
+ arPLS baseline
       │
       ▼
- Decompress to full resolution
+ Decompress → full resolution
       │
       ▼
- Peak detection                      # smoothed derivative + amplitude threshold
+ Peak detection + integration    — PD / TS / Gaussian / EGH
       │
       ▼
- Peak integration                    # PD / TS / Gaussian / EGH
+ Baseline ensemble (15 configs)  — airPLS · arPLS · LMV · FlatFit · BEADS
+      │  ├─ Step 1: correlation weights ───────────────────► area_cons
+      │  └─ Step 2: Z-score penalty ───────────────────────► u_baseline
       │
       ▼
- Baseline ensemble (15 configs)      # airPLS · arPLS · LMV · FlatFit · BEADS
-      │  ├─ Step 1: correlation weights ──────────────────► area_cons
-      │  └─ Step 2: Z-score penalty ──────────────────────► u_baseline
-      │
-      ▼
- Noise estimation (LOD / LOQ) ──────────────────────────► u_noise
+ Noise estimation ───────────────────────────────────────► u_noise
       │
       ▼
  u_area = √(u_baseline² + u_noise² + u_sass²)
       │
       ▼
- ChromResult (peaks · uncertainties · LOD/LOQ · alignment)
+ replicate_quality_gate() → loq_filter() → export_training_set()
 ```
+
+---
+
+## Uncertainty model
+
+| Component | Symbol | Source |
+|---|---|---|
+| Baseline placement ambiguity | `u_cons` | Ensemble spread + Z-score inflation |
+| Detector noise propagated through integration | `u_noise` | Noise floor × √(peak width × Δt) |
+| SASS denoising distortion | `u_sass` | \|∫(pre − post SASS)\| over peak window |
+
+Combined: **U = 2 · √(u_baseline² + u_noise² + u_sass²)** (k = 2, ~95 %).
 
 ---
 
@@ -161,19 +202,20 @@ n_samples × n_chroms signal matrix  (+ RT vector)
 
 | Column | Description |
 |---|---|
-| `area_cons` | Correlation-weighted consensus area (best point estimate) |
-| `u_step1` | Baseline uncertainty before Z-score penalty |
-| `Z_spread` | Weighted mean \|Z\| — integration difficulty indicator |
-| `penalty` | Step-2 inflation factor (1 = clean peak, > 1 = ambiguous) |
-| `u_cons` | Penalised baseline standard uncertainty |
+| `area_cons` | Consensus area — best point estimate (mV·s) |
+| `u_cons` | Baseline standard uncertainty (k=1) |
 | `u_noise` | Noise-propagation standard uncertainty |
 | `u_sass` | SASS-distortion standard uncertainty |
-| `u_area` | Combined standard uncertainty (k = 1) |
-| `U_area` | Expanded uncertainty (k = 2, ~95 %) |
+| `u_area` | Combined standard uncertainty (k=1) |
+| `U_area` | Expanded uncertainty (k=2, ~95 %) |
+| `area_cv_pct` | Relative standard uncertainty (%) — primary label-quality indicator |
+| `Z_spread` | Weighted mean \|Z\| — integration difficulty |
+| `penalty` | Step-2 inflation factor (1 = clean, > 1 = ambiguous baseline) |
+| `aic_winner` | AICc-selected integration method |
 | `area_PD` | Area by Perpendicular Drop |
 | `area_TS` | Area by Tangent Skim |
 | `area_gauss` | Area by Gaussian fit |
-| `area_EGH` | Area by Exponentially Modified Gaussian fit |
+| `area_EGH` | Area by EGH fit |
 
 ---
 
@@ -189,83 +231,16 @@ n_samples × n_chroms signal matrix  (+ RT vector)
 
 ---
 
-## Method configuration
-
-The pipeline is controlled by a YAML file passed to `read_method_config()`:
-
-```yaml
-method:
-  name: "GC light hydrocarbons"
-  RT_unit: min          # "min" scales areas to counts·s (×60)
-
-inhibit:
-  - [0.00, 1.10]        # valve-switching artifacts, solvent front
-  - [20.38, 27.00]      # tail region
-
-# Baseline-inhibit: RT windows replaced by linear interpolation in the baseline.
-# Useful when a large spike would distort the ensemble algorithms.
-baseline_inhibit:
-  - [0.00, 1.20]
-
-peaks:
-  - name: Methane
-    RT_ref:    1.37
-    RT_window: 0.20
-    # merge_window: merge all detected sub-peaks within ±N min of RT_ref into one.
-    # merge_window: 0.15
-    # ensemble_method: override the ensemble consensus with a single-method area.
-    # ensemble_method: TS
-
-processing:
-  x_factor: 50          # block-average compression factor
-  denoise:   true
-
-# Global denoising parameters (SASS):
-denoising:
-  d:   1
-  fc:  0.011
-  K:   1
-  lam: 0.2
-
-# Per-segment denoising overrides (e.g. solvent front needs different fc):
-denoising_segments:
-  - rt_min: 0.0
-    rt_max: 2.0
-    fc:  0.03
-    lam: 0.5
-
-baseline:
-  lambda: 1.0e7
-  ratio:  1.0e-6
-
-detection:
-  amp_thresh:          0
-  smooth_width_factor: 3
-
-integration:
-  methods: [PD, TS, gauss, EGH]
-  run_ensemble:    true
-  ensemble_method: TS
-
-# debug_baselines: save a PNG of all ensemble baselines for this peak.
-# peaks:
-#   - name: PropanePeak
-#     debug_baselines: true
-```
-
----
-
 ## Name and logo
 
 The package name honours **M. C. Escher** (1898–1972), who was a devoted admirer
-of the Amalfi coast and visited it repeatedly between 1925 and 1936. The
-landscape — its staggered cliffs, terraced villages, and interlocking planes of
-rock and sea — left a lasting mark on his visual language.
+of the Amalfi coast. The landscape — its staggered cliffs, terraced villages,
+and interlocking planes of rock and sea — left a lasting mark on his visual
+language. The idea of decomposing a chromatogram into interlocking,
+self-consistent baseline segments traces the same geometric intuition.
 
-The logo is a photograph of those same cliffs near Maiori, rendered in shades of
-blue, taken at the moment the project was conceived. The connection is not merely
-wordplay: the idea of decomposing a chromatogram into interlocking, self-consistent
-segments traces the same geometric intuition that runs through Escher's work.
+The logo is a photograph of those same cliffs near Maiori, rendered in shades
+of blue, taken at the moment the project was conceived.
 
 ---
 

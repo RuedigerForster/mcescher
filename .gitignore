@@ -3,8 +3,7 @@
 .RData
 .Ruserdata
 Ressources/
-data/*
-!data/Grob_mix.RData
+data/
 R/other sources/
 R/orphans/
 R/characteriseInstrument/
