@@ -84,6 +84,35 @@ loq_filter(
 
 ---
 
+## For chromatographers
+
+Manual peak integration still depends heavily on expert judgement. Results vary
+between operators, software versions, and integration parameter sets — yet the
+reported area is almost always presented as a single number with no uncertainty
+attached. Accreditation bodies accept this. Downstream statistics ignore it.
+The area walks into calibration as if it were exact.
+
+**mcescher** treats baseline placement as what it actually is: an estimation
+problem with multiple plausible solutions. Fifteen baseline configurations run
+in parallel; their results are combined by correlation-weighted consensus;
+and a three-component GUM uncertainty is attached to every area — baseline
+ambiguity, detector noise propagated through integration, and denoising
+distortion, each reported separately and combined in quadrature.
+
+The second step is the one most integrators miss. Within a batch, all peaks
+share the same injection — so their areas are correlated. A baseline that
+wanders under one peak is likely wandering under adjacent peaks too. mcescher
+exploits this: Z-scores are computed relative to the expected smooth area curve
+across the chromatogram, and peaks with deviating Z-scores have their
+uncertainty inflated accordingly. The `Z_spread` column is the integration
+difficulty indicator that CDS software has never reported.
+
+The result is an area estimate with a realistic, traceable uncertainty — not
+because it makes the number look more scientific, but because it tells you
+which areas to trust and which to treat with caution.
+
+---
+
 ## Reference dataset
 
 The OGE-UDE Grob mix dataset (2693 GC-FID replicate injections, Agilent
