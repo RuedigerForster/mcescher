@@ -4,6 +4,8 @@
   <img src="man/figures/mcescher.png" width="160" alt="mcescher logo"/>
 </p>
 
+[![License: GPL v3](https://img.shields.io/badge/License-GPLv3-blue.svg)](https://www.gnu.org/licenses/gpl-3.0)
+ 
 > Automated chromatographic peak integration with GUM-compliant uncertainty quantification.
 
 ---
